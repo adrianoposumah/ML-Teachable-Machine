@@ -16,14 +16,42 @@
       <app-header title="Pengenal Squid dan Octopus" subtitle="Identifikasi cumi-cumi dan gurita berdasarkan gambar." show-button="true" button-text="Start Camera" back-url="../index.html"> </app-header>
 
       <div class="recognition-container">
-        <div class="row">
-          <div class="col-md-12">
-            <div class="camera-container">
-              <div class="results-title">
-                <i class="bi bi-camera-video"></i>
-                <h3 class="mb-0">Camera Preview</h3>
+        <div class="tab-buttons">
+          <button class="tab-btn active" data-tab="camera-tab"><i class="bi bi-camera-video"></i> Camera</button>
+          <button class="tab-btn" data-tab="upload-tab"><i class="bi bi-upload"></i> Upload Image</button>
+        </div>
+
+        <div id="camera-tab" class="tab-content active">
+          <div class="row">
+            <div class="col-md-12">
+              <div class="camera-container">
+                <div class="results-title">
+                  <i class="bi bi-camera-video"></i>
+                  <h3 class="mb-0">Camera Preview</h3>
+                </div>
+                <div id="webcam-container"></div>
               </div>
-              <div id="webcam-container"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="upload-tab" class="tab-content">
+          <div class="row">
+            <div class="col-md-12">
+              <div class="upload-section">
+                <div class="results-title">
+                  <i class="bi bi-file-earmark-image"></i>
+                  <h3 class="mb-0">Image Upload</h3>
+                </div>
+                <div class="upload-container">
+                  <div class="file-input-wrapper">
+                    <button class="btn btn-primary upload-btn"><i class="bi bi-upload"></i> Choose Image</button>
+                    <input type="file" id="imageUpload" accept="image/*" />
+                  </div>
+                  <img id="imagePreview" class="image-preview" src="#" alt="Preview" />
+                  <button id="predictButton" class="btn btn-success" disabled><i class="bi bi-search"></i> Analyze Image</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -79,54 +107,62 @@
           webcamContainer.appendChild(webcam.canvas);
 
           // Setup UI elements for predictions
-          labelContainer = document.getElementById("label-container");
-          labelContainer.innerHTML = "";
-
-          const classLabels = model.getClassLabels();
-
-          for (let i = 0; i < classLabels.length; i++) {
-            const predictionRow = document.createElement("div");
-            predictionRow.className = "prediction-row";
-            predictionRow.id = `prediction-row-${i}`;
-
-            const imageLabel = document.createElement("div");
-            imageLabel.className = "animal-label"; // Reusing the animal-label class for consistency
-
-            const labelText = document.createElement("span");
-            labelText.textContent = classLabels[i];
-            imageLabel.appendChild(labelText);
-
-            const progressContainer = document.createElement("div");
-            progressContainer.className = "progress flex-grow-1 me-2";
-
-            const progressBar = document.createElement("div");
-            progressBar.id = `progress-bar-${i}`;
-            progressBar.className = "progress-bar";
-            progressBar.role = "progressbar";
-            progressBar.style.width = "0%";
-            progressBar.setAttribute("aria-valuenow", "0");
-            progressBar.setAttribute("aria-valuemin", "0");
-            progressBar.setAttribute("aria-valuemax", "100");
-
-            const valueSpan = document.createElement("span");
-            valueSpan.id = `value-span-${i}`;
-            valueSpan.className = "prediction-value";
-            valueSpan.textContent = "0.00";
-
-            progressContainer.appendChild(progressBar);
-            predictionRow.appendChild(imageLabel);
-            predictionRow.appendChild(progressContainer);
-            predictionRow.appendChild(valueSpan);
-            labelContainer.appendChild(predictionRow);
-          }
+          setupLabelContainer();
 
           document.getElementById("startButton").disabled = false;
           document.getElementById("startButton").innerHTML = '<i class="bi bi-camera-video"></i> Start Camera';
           document.getElementById("statusText").textContent = "Model loaded. Ready to start.";
+
+          // Enable the analyze button for uploaded images
+          document.getElementById("predictButton").disabled = false;
         } catch (error) {
           console.error("Error initializing model:", error);
           document.getElementById("statusText").textContent = "Error loading model: " + error.message;
           document.getElementById("startButton").disabled = true;
+        }
+      }
+
+      function setupLabelContainer() {
+        // Setup UI elements for predictions
+        labelContainer = document.getElementById("label-container");
+        labelContainer.innerHTML = "";
+
+        const classLabels = model.getClassLabels();
+
+        for (let i = 0; i < classLabels.length; i++) {
+          const predictionRow = document.createElement("div");
+          predictionRow.className = "prediction-row";
+          predictionRow.id = `prediction-row-${i}`;
+
+          const imageLabel = document.createElement("div");
+          imageLabel.className = "animal-label"; // Reusing the animal-label class for consistency
+
+          const labelText = document.createElement("span");
+          labelText.textContent = classLabels[i];
+          imageLabel.appendChild(labelText);
+
+          const progressContainer = document.createElement("div");
+          progressContainer.className = "progress flex-grow-1 me-2";
+
+          const progressBar = document.createElement("div");
+          progressBar.id = `progress-bar-${i}`;
+          progressBar.className = "progress-bar";
+          progressBar.role = "progressbar";
+          progressBar.style.width = "0%";
+          progressBar.setAttribute("aria-valuenow", "0");
+          progressBar.setAttribute("aria-valuemin", "0");
+          progressBar.setAttribute("aria-valuemax", "100");
+
+          const valueSpan = document.createElement("span");
+          valueSpan.id = `value-span-${i}`;
+          valueSpan.className = "prediction-value";
+          valueSpan.textContent = "0.00";
+
+          progressContainer.appendChild(progressBar);
+          predictionRow.appendChild(imageLabel);
+          predictionRow.appendChild(progressContainer);
+          predictionRow.appendChild(valueSpan);
+          labelContainer.appendChild(predictionRow);
         }
       }
 
@@ -168,12 +204,41 @@
       }
 
       // run the webcam image through the image model
-      async function predict() {
+      async function predict(image = null) {
         // predict can take in an image, video or canvas html element
-        const prediction = await model.predict(webcam.canvas);
-
+        const prediction = await model.predict(image || webcam.canvas);
         updateUI(prediction);
       }
+
+      // Handle image upload and preview
+      document.getElementById("imageUpload").addEventListener("change", function (e) {
+        const imagePreview = document.getElementById("imagePreview");
+        const file = e.target.files[0];
+
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function (event) {
+            imagePreview.src = event.target.result;
+            imagePreview.style.display = "block";
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Predict based on the uploaded image
+      document.getElementById("predictButton").addEventListener("click", async function () {
+        const imagePreview = document.getElementById("imagePreview");
+        if (imagePreview.src && imagePreview.style.display !== "none") {
+          try {
+            document.getElementById("statusText").textContent = "Analyzing image...";
+            await predict(imagePreview);
+            document.getElementById("statusText").textContent = "Analysis complete";
+          } catch (error) {
+            console.error("Error predicting from image:", error);
+            document.getElementById("statusText").textContent = "Error analyzing image: " + error.message;
+          }
+        }
+      });
 
       function updateUI(predictions) {
         let highestScore = 0;
@@ -233,6 +298,25 @@
           valueSpan.textContent = score.toFixed(2);
         }
       }
+
+      // Tab switching functionality
+      document.querySelectorAll(".tab-btn").forEach((button) => {
+        button.addEventListener("click", function () {
+          // Remove active class from all buttons and tabs
+          document.querySelectorAll(".tab-btn").forEach((btn) => btn.classList.remove("active"));
+          document.querySelectorAll(".tab-content").forEach((tab) => tab.classList.remove("active"));
+
+          // Add active class to clicked button and its corresponding tab
+          this.classList.add("active");
+          document.getElementById(this.dataset.tab).classList.add("active");
+
+          // If switching to camera tab and camera was already running, do nothing
+          // If switching to upload tab and camera was running, stop it
+          if (this.dataset.tab === "upload-tab" && isRunning) {
+            toggleListening();
+          }
+        });
+      });
 
       document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("startButton").disabled = true;
