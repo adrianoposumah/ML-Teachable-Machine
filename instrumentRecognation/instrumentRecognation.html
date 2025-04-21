@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pengenal Suara Instrumen</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../style/style.css" />
+    <script src="../components/app-header.js" defer></script>
+    <script src="../components/app-footer.js" defer></script>
+  </head>
+  <body>
+    <div class="container">
+      <app-header title="Pengenal Suara Instrumen" subtitle="Identifikasi jenis instrumen musik berdasarkan suaranya." show-button="true" button-text="Start Listening" back-url="../index.html"> </app-header>
+
+      <div class="recognition-container">
+        <div class="results-title">
+          <i class="bi bi-soundwave"></i>
+          <h3 class="mb-0">Recognition Results</h3>
+        </div>
+        <div id="label-container">
+          <!-- Prediction bars will be inserted here -->
+        </div>
+      </div>
+    </div>
+
+    <app-footer></app-footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script type="text/javascript">
+      // the link to your model provided by Teachable Machine export panel
+      const URL = "https://teachablemachine.withgoogle.com/models/eiALcFivn/";
+
+      let recognizer;
+      let isListening = false;
+
+      async function createModel() {
+        const checkpointURL = URL + "model.json"; // model topology
+        const metadataURL = URL + "metadata.json"; // model metadata
+
+        try {
+          const recognizerInstance = await speechCommands.create(
+            "BROWSER_FFT", // fourier transform type, not useful to change
+            undefined, // speech commands vocabulary feature, not useful for your models
+            checkpointURL,
+            metadataURL
+          );
+
+          await recognizerInstance.ensureModelLoaded();
+          console.log("Model loaded successfully");
+
+          return recognizerInstance;
+        } catch (error) {
+          console.error("Error creating model:", error);
+          throw error;
+        }
+      }
+
+      async function init() {
+        try {
+          document.getElementById("statusText").textContent = "Loading model...";
+          recognizer = await createModel();
+
+          const classLabels = recognizer.wordLabels();
+          const labelContainer = document.getElementById("label-container");
+          labelContainer.innerHTML = "";
+
+          for (let i = 0; i < classLabels.length; i++) {
+            const predictionRow = document.createElement("div");
+            predictionRow.className = "prediction-row";
+            predictionRow.id = `prediction-row-${i}`;
+
+            const animalLabel = document.createElement("div");
+            animalLabel.className = "animal-label";
+
+            const labelText = document.createElement("span");
+            labelText.textContent = classLabels[i];
+            animalLabel.appendChild(labelText);
+
+            const progressContainer = document.createElement("div");
+            progressContainer.className = "progress flex-grow-1 me-2";
+
+            const progressBar = document.createElement("div");
+            progressBar.id = `progress-bar-${i}`;
+            progressBar.className = "progress-bar";
+            progressBar.role = "progressbar";
+            progressBar.style.width = "0%";
+            progressBar.setAttribute("aria-valuenow", "0");
+            progressBar.setAttribute("aria-valuemin", "0");
+            progressBar.setAttribute("aria-valuemax", "100");
+
+            const valueSpan = document.createElement("span");
+            valueSpan.id = `value-span-${i}`;
+            valueSpan.className = "prediction-value";
+            valueSpan.textContent = "0.00";
+
+            progressContainer.appendChild(progressBar);
+            predictionRow.appendChild(animalLabel);
+            predictionRow.appendChild(progressContainer);
+            predictionRow.appendChild(valueSpan);
+            labelContainer.appendChild(predictionRow);
+          }
+
+          document.getElementById("startButton").disabled = false;
+          document.getElementById("startButton").innerHTML = '<i class="bi bi-mic"></i> Start Listening';
+          document.getElementById("statusText").textContent = "Model loaded. Ready to listen.";
+        } catch (error) {
+          console.error("Error initializing model:", error);
+          document.getElementById("statusText").textContent = "Error loading model.";
+          document.getElementById("startButton").disabled = true;
+        }
+      }
+
+      function updateUI(scores, classLabels) {
+        let highestScore = 0;
+        let highestIndex = -1;
+
+        for (let i = 0; i < scores.length; i++) {
+          if (scores[i] > highestScore) {
+            highestScore = scores[i];
+            highestIndex = i;
+          }
+        }
+
+        for (let i = 0; i < classLabels.length; i++) {
+          const progressBar = document.getElementById(`progress-bar-${i}`);
+          const valueSpan = document.getElementById(`value-span-${i}`);
+          const predictionRow = document.getElementById(`prediction-row-${i}`);
+
+          if (!progressBar || !valueSpan || !predictionRow) {
+            console.warn(`UI elements for label index ${i} not found.`);
+            continue;
+          }
+
+          const score = scores[i];
+          const percentage = (score * 100).toFixed(0) + "%";
+
+          progressBar.style.width = percentage;
+          progressBar.setAttribute("aria-valuenow", score * 100);
+
+          progressBar.classList.remove("highlighted");
+
+          if (score > 0.75) {
+            progressBar.className = "progress-bar bg-success";
+          } else if (score > 0.5) {
+            progressBar.className = "progress-bar bg-info";
+          } else if (score > 0.25) {
+            progressBar.className = "progress-bar bg-warning";
+          } else {
+            progressBar.className = "progress-bar bg-danger";
+          }
+
+          if (i === highestIndex && score > 0.3) {
+            progressBar.classList.add("highlighted");
+            predictionRow.style.transform = "translateY(-3px)";
+            predictionRow.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.1)";
+          } else {
+            predictionRow.style.transform = "";
+            predictionRow.style.boxShadow = "";
+          }
+
+          if (score > 0.1) {
+            progressBar.textContent = classLabels[i];
+          } else {
+            progressBar.textContent = "";
+          }
+
+          valueSpan.textContent = score.toFixed(2);
+        }
+      }
+
+      async function toggleListening() {
+        if (isListening) {
+          if (recognizer && recognizer.isListening()) {
+            try {
+              await recognizer.stopListening();
+            } catch (error) {
+              console.error("Error stopping listening:", error);
+            }
+          }
+          isListening = false;
+          document.getElementById("startButton").innerHTML = '<i class="bi bi-mic"></i> Start Listening';
+          document.getElementById("statusIndicator").classList.remove("active");
+          document.getElementById("statusText").textContent = "Not listening";
+        } else {
+          if (!recognizer) {
+            document.getElementById("statusText").textContent = "Error: Recognizer not initialized";
+            return;
+          }
+
+          try {
+            const classLabels = recognizer.wordLabels();
+
+            recognizer.listen(
+              (result) => {
+                const scores = result.scores;
+                if (scores && typeof scores[Symbol.iterator] === "function") {
+                  updateUI(scores, classLabels);
+                } else {
+                  console.warn("Received invalid scores data:", scores);
+                }
+              },
+              {
+                includeSpectrogram: false,
+                probabilityThreshold: 0,
+                invokeCallbackOnNoiseAndUnknown: true,
+                overlapFactor: 0.5,
+              }
+            );
+
+            isListening = true;
+            document.getElementById("startButton").innerHTML = '<i class="bi bi-mic-mute"></i> Stop Listening';
+            document.getElementById("statusIndicator").classList.add("active");
+            document.getElementById("statusText").textContent = "Listening...";
+          } catch (error) {
+            if (error.name === "NotAllowedError" || error.message.includes("Permission denied")) {
+              document.getElementById("statusText").textContent = "Microphone access denied";
+            } else {
+              document.getElementById("statusText").textContent = "Error starting listener: " + error.message;
+            }
+            isListening = false;
+            document.getElementById("startButton").innerHTML = '<i class="bi bi-mic"></i> Start Listening';
+            document.getElementById("statusIndicator").classList.remove("active");
+          }
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("startButton").disabled = true;
+        document.getElementById("statusText").textContent = "Loading model...";
+        init().catch((error) => {
+          console.error("Initialization error:", error);
+          document.getElementById("statusText").textContent = "Failed to load model: " + error.message;
+        });
+      });
+    </script>
+  </body>
+</html>
