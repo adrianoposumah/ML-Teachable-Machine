@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pengenal Pose Semaphore</title>
+    <title>Pengenal Squid dan Octopus</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
   </head>
   <body>
     <div class="container">
-      <app-header title="Pengenal Pose Semaphore" subtitle="Identifikasi kode semaphore berdasarkan pose tubuh." show-button="true" button-text="Start Camera" back-url="../index.html"> </app-header>
+      <app-header title="Pengenal Squid dan Octopus" subtitle="Identifikasi cumi-cumi dan gurita berdasarkan gambar." show-button="true" button-text="Start Camera" back-url="../index.html"> </app-header>
 
       <div class="recognition-container">
         <div class="row">
@@ -23,13 +23,13 @@
                 <i class="bi bi-camera-video"></i>
                 <h3 class="mb-0">Camera Preview</h3>
               </div>
-              <canvas id="canvas"></canvas>
+              <div id="webcam-container"></div>
             </div>
           </div>
         </div>
 
         <div class="results-title">
-          <i class="bi bi-person-arms-up"></i>
+          <i class="bi bi-search"></i>
           <h3 class="mb-0">Recognition Results</h3>
         </div>
         <div id="label-container">
@@ -40,14 +40,15 @@
 
     <app-footer></app-footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
 
     <script type="text/javascript">
       // the link to your model provided by Teachable Machine export panel
-      const URL = "https://teachablemachine.withgoogle.com/models/QkjhlAzZn/";
-      let model, webcam, ctx, labelContainer, maxPredictions;
+      const URL = "https://teachablemachine.withgoogle.com/models/gCTHDhuY7/";
+
+      let model, webcam, labelContainer, maxPredictions;
       let isRunning = false;
 
       async function init() {
@@ -58,41 +59,42 @@
           document.getElementById("statusText").textContent = "Loading model...";
 
           // load the model and metadata
-          model = await tmPose.load(modelURL, metadataURL);
+          model = await tmImage.load(modelURL, metadataURL);
           maxPredictions = model.getTotalClasses();
 
-          // Setup webcam
+          // Convenience function to setup a webcam
           const size = 400;
           const flip = true; // whether to flip the webcam
-          webcam = new tmPose.Webcam(size, size, flip); // width, height, flip
+          webcam = new tmImage.Webcam(size, size, flip); // width, height, flip
           await webcam.setup(); // request access to the webcam
 
-          // Setup canvas
-          const canvas = document.getElementById("canvas");
-          canvas.width = size;
-          canvas.height = size;
-          ctx = canvas.getContext("2d");
+          // append elements to the DOM
+          const webcamContainer = document.getElementById("webcam-container");
+          webcamContainer.innerHTML = "";
+          webcam.canvas.style.borderRadius = "10px";
+          webcam.canvas.style.boxShadow = "0 4px 15px rgba(0, 0, 0, 0.2)";
+          webcam.canvas.style.backgroundColor = "#000";
+          webcam.canvas.style.maxWidth = "100%";
+          webcam.canvas.style.height = "auto";
+          webcamContainer.appendChild(webcam.canvas);
 
           // Setup UI elements for predictions
           labelContainer = document.getElementById("label-container");
           labelContainer.innerHTML = "";
 
-          const classLabels = [];
-          for (let i = 0; i < maxPredictions; i++) {
-            classLabels.push(model.getClassLabels()[i]);
-          }
+          const classLabels = model.getClassLabels();
 
           for (let i = 0; i < classLabels.length; i++) {
             const predictionRow = document.createElement("div");
             predictionRow.className = "prediction-row";
             predictionRow.id = `prediction-row-${i}`;
 
-            const poseLabel = document.createElement("div");
-            poseLabel.className = "pose-label";
+            const imageLabel = document.createElement("div");
+            imageLabel.className = "animal-label"; // Reusing the animal-label class for consistency
 
             const labelText = document.createElement("span");
             labelText.textContent = classLabels[i];
-            poseLabel.appendChild(labelText);
+            imageLabel.appendChild(labelText);
 
             const progressContainer = document.createElement("div");
             progressContainer.className = "progress flex-grow-1 me-2";
@@ -112,7 +114,7 @@
             valueSpan.textContent = "0.00";
 
             progressContainer.appendChild(progressBar);
-            predictionRow.appendChild(poseLabel);
+            predictionRow.appendChild(imageLabel);
             predictionRow.appendChild(progressContainer);
             predictionRow.appendChild(valueSpan);
             labelContainer.appendChild(predictionRow);
@@ -158,29 +160,25 @@
         }
       }
 
-      async function loop(timestamp) {
+      async function loop() {
         if (!isRunning) return;
-
         webcam.update(); // update the webcam frame
         await predict();
         window.requestAnimationFrame(loop);
       }
 
+      // run the webcam image through the image model
       async function predict() {
-        // Prediction #1: run input through posenet
-        const { pose, posenetOutput } = await model.estimatePose(webcam.canvas);
-        // Prediction 2: run input through teachable machine classification model
-        const prediction = await model.predict(posenetOutput);
+        // predict can take in an image, video or canvas html element
+        const prediction = await model.predict(webcam.canvas);
 
-        updateUI(prediction, model.getClassLabels());
-
-        // Draw the poses
-        drawPose(pose);
+        updateUI(prediction);
       }
 
-      function updateUI(predictions, classLabels) {
+      function updateUI(predictions) {
         let highestScore = 0;
         let highestIndex = -1;
+        const classLabels = model.getClassLabels();
 
         for (let i = 0; i < predictions.length; i++) {
           if (predictions[i].probability > highestScore) {
@@ -189,7 +187,7 @@
           }
         }
 
-        for (let i = 0; i < classLabels.length; i++) {
+        for (let i = 0; i < predictions.length; i++) {
           const progressBar = document.getElementById(`progress-bar-${i}`);
           const valueSpan = document.getElementById(`value-span-${i}`);
           const predictionRow = document.getElementById(`prediction-row-${i}`);
@@ -233,18 +231,6 @@
           }
 
           valueSpan.textContent = score.toFixed(2);
-        }
-      }
-
-      function drawPose(pose) {
-        if (webcam.canvas) {
-          ctx.drawImage(webcam.canvas, 0, 0);
-          // draw the keypoints and skeleton
-          if (pose) {
-            const minPartConfidence = 0.5;
-            tmPose.drawKeypoints(pose.keypoints, minPartConfidence, ctx);
-            tmPose.drawSkeleton(pose.keypoints, minPartConfidence, ctx);
-          }
         }
       }
 
